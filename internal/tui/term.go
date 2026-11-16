@@ -6,7 +6,7 @@ import (
 	"golang.org/x/term"
 )
 
-// size devuelve columnas y filas de la terminal.
+// size returns the terminal columns and rows.
 func size() (w, h int) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || w <= 0 || h <= 0 {
@@ -15,8 +15,8 @@ func size() (w, h int) {
 	return w, h
 }
 
-// rawMode desactiva el eco y el modo línea (Linux, macOS y Windows).
-// Devuelve la función que restaura la terminal.
+// rawMode disables echo and line mode (Linux, macOS and Windows).
+// It returns the function that restores the terminal.
 func rawMode() (restore func(), err error) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {

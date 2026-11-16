@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila binarios estáticos para Linux, macOS y Windows (amd64 y arm64) en ./dist
+# Builds static binaries for Linux, macOS and Windows (amd64 and arm64) into ./dist
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p dist

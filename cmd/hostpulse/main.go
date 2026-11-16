@@ -14,13 +14,13 @@ import (
 func main() {
 	os.Setenv("LC_ALL", "C")
 	fs := flag.NewFlagSet("hostpulse", flag.ExitOnError)
-	interval := fs.Float64("d", 1, "segundos entre actualizaciones")
-	noColor := fs.Bool("no-color", false, "desactiva los colores")
-	ver := fs.Bool("v", false, "muestra la versión")
+	interval := fs.Float64("d", 1, "seconds between updates")
+	noColor := fs.Bool("no-color", false, "disable colors")
+	ver := fs.Bool("v", false, "print the version")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "HostPulse %s — monitor del sistema para la terminal\n\nUso: hostpulse [opciones]\n\n", version.Version)
+		fmt.Fprintf(os.Stderr, "HostPulse %s — system monitor for the terminal\n\nUsage: hostpulse [options]\n\n", version.Version)
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "\nTeclas: q salir · ↑↓ mover · c/m/p/n ordenar · r invertir · / filtrar · espacio pausa")
+		fmt.Fprintln(os.Stderr, "\nKeys: q quit · ↑↓ move · c/m/p/n sort · r reverse · / filter · space pause")
 	}
 	fs.Parse(os.Args[1:])
 

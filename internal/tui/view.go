@@ -13,16 +13,16 @@ const procMinRows = 8
 
 func (m *model) view(w, h int) []string {
 	if w < 60 || h < 14 {
-		msg := fmt.Sprintf("Terminal demasiado pequeña (%dx%d). Mínimo 60x14.", w, h)
+		msg := fmt.Sprintf("Terminal too small (%dx%d). Minimum 60x14.", w, h)
 		lines := make([]string, h)
 		lines[0] = msg
 		return lines
 	}
 	s := m.snap
-	body := h - 2 // cabecera + pie
+	body := h - 2 // header + footer
 	var rows []string
 
-	// Paneles superiores: CPU a la izquierda, memoria/red/disco a la derecha (o apilados si es estrecho).
+	// Top panels: CPU on the left, memory/network/disk on the right (stacked when the terminal is narrow).
 	wide := w >= 110
 	cw, rw := w, w
 	if wide {
@@ -36,7 +36,7 @@ func (m *model) view(w, h int) []string {
 		th := imin(imax(cpuNeed, rightNeed), body-procMinRows)
 		th = imax(th, 8)
 		l := box(m.cpuTitle(s), m.cpuLines(s, cw-4, th-2), cw, th)
-		r := box("Memoria · Red · E/S", m.memLines(s, rw-4), rw, th)
+		r := box("Memory · Network · I/O", m.memLines(s, rw-4), rw, th)
 		for i := range l {
 			top = append(top, l[i]+r[i])
 		}
@@ -47,13 +47,13 @@ func (m *model) view(w, h int) []string {
 		}
 		rh := imin(rightNeed, body-len(top)-procMinRows)
 		if rh >= 6 {
-			top = append(top, box("Memoria · Red · E/S", m.memLines(s, rw-4), rw, rh)...)
+			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4), rw, rh)...)
 		}
 	}
 	rows = append(rows, top...)
 
 	if d := m.diskLines(s, w-4, 4); len(d) > 0 && body-len(rows)-(len(d)+2) >= procMinRows {
-		rows = append(rows, box("Discos", d, w, len(d)+2)...)
+		rows = append(rows, box("Disks", d, w, len(d)+2)...)
 	}
 
 	ph := body - len(rows)
@@ -76,9 +76,9 @@ func (m *model) header(s sysinfo.Snapshot, w int) string {
 		left += paint(cDim, " · "+hs.PrimaryIP)
 	}
 	left += paint(cDim, " · "+hs.OS+" · kernel "+hs.Kernel)
-	right := paint(cDim, "activo ") + paint(cText, fmtUptime(hs.UptimeSec)) + paint(cDim, " · ") + paint(cText, time.Now().Format("15:04:05"))
+	right := paint(cDim, "up ") + paint(cText, fmtUptime(hs.UptimeSec)) + paint(cDim, " · ") + paint(cText, time.Now().Format("15:04:05"))
 	if m.paused {
-		right = bold(paint(cYellow, "⏸ PAUSA")) + paint(cDim, " · ") + right
+		right = bold(paint(cYellow, "⏸ PAUSED")) + paint(cDim, " · ") + right
 	}
 	gap := w - vlen(left) - vlen(right)
 	if gap < 1 {
@@ -91,10 +91,10 @@ func key(k, desc string) string { return paint(cAccent, k) + paint(cDim, " "+des
 
 func (m *model) footer(w int) string {
 	if m.filtering {
-		return paint(cAccent, "Filtrar ") + paint(cText, m.filter) + paint(cAccent, "▏") + paint(cDim, "   Enter aceptar · Esc borrar")
+		return paint(cAccent, "Filter ") + paint(cText, m.filter) + paint(cAccent, "▏") + paint(cDim, "   Enter accept · Esc clear")
 	}
-	f := key("q", "salir") + key("↑↓", "mover") + key("c", "CPU") + key("m", "memoria") + key("p", "PID") + key("n", "nombre") +
-		key("r", "invertir") + key("/", "filtrar") + key("espacio", "pausa")
+	f := key("q", "quit") + key("↑↓", "move") + key("c", "CPU") + key("m", "memory") + key("p", "PID") + key("n", "name") +
+		key("r", "reverse") + key("/", "filter") + key("space", "pause")
 	return clip(f, w)
 }
 
@@ -110,7 +110,7 @@ func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 	c := s.CPU
 	var ls []string
 	bw := inner - 4 - 7
-	ls = append(ls, paint(cLabel, "Uso ")+bar(c.UsagePct, bw)+" "+paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)))
+	ls = append(ls, paint(cLabel, "CPU ")+bar(c.UsagePct, bw)+" "+paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)))
 	ls = append(ls, spark(m.cpuH, inner, true))
 	ls = append(ls, paint(cDim, "usr ")+fmt.Sprintf("%4.1f", c.User)+paint(cDim, "  sys ")+fmt.Sprintf("%4.1f", c.System)+
 		paint(cDim, "  io ")+fmt.Sprintf("%4.1f", c.IOWait)+paint(cDim, "  steal ")+fmt.Sprintf("%4.1f", c.Steal))
@@ -147,8 +147,8 @@ func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 		}
 	}
 
-	info := paint(cDim, "carga ") + fmt.Sprintf("%.2f %.2f %.2f", c.LoadAvg[0], c.LoadAvg[1], c.LoadAvg[2]) +
-		paint(cDim, fmt.Sprintf(" · %d núcleos", c.Cores))
+	info := paint(cDim, "load ") + fmt.Sprintf("%.2f %.2f %.2f", c.LoadAvg[0], c.LoadAvg[1], c.LoadAvg[2]) +
+		paint(cDim, fmt.Sprintf(" · %d cores", c.Cores))
 	if c.FreqMHz > 0 {
 		info += paint(cDim, fmt.Sprintf(" · %.1f GHz", c.FreqMHz/1000))
 	}
@@ -156,8 +156,8 @@ func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 		info += paint(cDim, " · ") + paint(grad((c.TempC-40)/50*100), fmt.Sprintf("%.0f°C", c.TempC))
 	}
 	ls = append(ls, info)
-	ls = append(ls, paint(cDim, "tareas ")+fmt.Sprint(c.Processes)+paint(cDim, " · hilos ")+fmt.Sprint(c.Threads)+
-		paint(cDim, " · ejecutando ")+fmt.Sprint(c.Running)+paint(cDim, " · zombis ")+fmt.Sprint(c.Zombies))
+	ls = append(ls, paint(cDim, "tasks ")+fmt.Sprint(c.Processes)+paint(cDim, " · threads ")+fmt.Sprint(c.Threads)+
+		paint(cDim, " · running ")+fmt.Sprint(c.Running)+paint(cDim, " · zombies ")+fmt.Sprint(c.Zombies))
 	return ls
 }
 
@@ -166,13 +166,13 @@ func (m *model) memLines(s sysinfo.Snapshot, inner int) []string {
 	var ls []string
 	bw := inner - 5 - 7
 	ls = append(ls, paint(cLabel, "RAM  ")+bar(me.UsedPct, bw)+" "+paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct)))
-	ls = append(ls, paint(cDim, "usada ")+fmtBytes(me.Used)+paint(cDim, " / ")+fmtBytes(me.Total)+
-		paint(cDim, " · caché ")+fmtBytes(me.Cached)+paint(cDim, " · libre ")+fmtBytes(me.Available))
+	ls = append(ls, paint(cDim, "used ")+fmtBytes(me.Used)+paint(cDim, " / ")+fmtBytes(me.Total)+
+		paint(cDim, " · cached ")+fmtBytes(me.Cached)+paint(cDim, " · free ")+fmtBytes(me.Available))
 	if me.SwapTotal > 0 {
 		sp := float64(me.SwapUsed) / float64(me.SwapTotal) * 100
 		ls = append(ls, paint(cLabel, "Swap ")+bar(sp, bw)+" "+paint(grad(sp), fmt.Sprintf("%5.1f%%", sp)))
 	} else {
-		ls = append(ls, paint(cLabel, "Swap ")+paint(cDim, "sin swap"))
+		ls = append(ls, paint(cLabel, "Swap ")+paint(cDim, "no swap"))
 	}
 	ls = append(ls, "")
 	sw := imax(4, inner-22)
@@ -180,13 +180,13 @@ func (m *model) memLines(s sysinfo.Snapshot, inner int) []string {
 	ls = append(ls, paint(cOrange, "↑ ")+pad(paint(cText, fmtRate(n.TxBps)), 11)+paint(cDim, fmt.Sprintf("%7.0f p/s ", n.TxPps))+spark(m.txH, sw, false))
 	if n.Conns.Available {
 		ls = append(ls, paint(cDim, "TCP ")+fmt.Sprintf("%d", n.Conns.Established)+paint(cDim, " est · ")+fmt.Sprintf("%d", n.Conns.TimeWait)+
-			paint(cDim, " tw · ")+fmt.Sprintf("%d", n.Conns.Listen)+paint(cDim, " escucha · errores ")+fmt.Sprint(n.Errors))
+			paint(cDim, " tw · ")+fmt.Sprintf("%d", n.Conns.Listen)+paint(cDim, " listen · errors ")+fmt.Sprint(n.Errors))
 	} else {
-		ls = append(ls, paint(cDim, "errores de red ")+fmt.Sprint(n.Errors))
+		ls = append(ls, paint(cDim, "network errors ")+fmt.Sprint(n.Errors))
 	}
 	ls = append(ls, "")
 	d := s.DiskIO
-	ls = append(ls, paint(cLabel, "Disco ")+paint(cDim, "lectura ")+fmtRate(d.ReadBps)+paint(cDim, " · escritura ")+fmtRate(d.WriteBps)+
+	ls = append(ls, paint(cLabel, "Disk ")+paint(cDim, "read ")+fmtRate(d.ReadBps)+paint(cDim, " · write ")+fmtRate(d.WriteBps)+
 		paint(cDim, fmt.Sprintf(" · %.0f iops", d.IOPS)))
 	return ls
 }
@@ -205,7 +205,7 @@ func (m *model) diskLines(s sysinfo.Snapshot, inner, max int) []string {
 		line := paint(cText, pad(mount, 14)) + " " + paint(cDim, pad(d.FSType, 7)) + " " + bar(d.UsedPct, bw) + " " +
 			paint(grad(d.UsedPct), fmt.Sprintf("%5.1f%%", d.UsedPct)) + "  " + fmtBytes(d.Used) + paint(cDim, " / ") + fmtBytes(d.Total)
 		if d.InodePct > 0 {
-			line += paint(cDim, fmt.Sprintf("  inodos %.0f%%", d.InodePct))
+			line += paint(cDim, fmt.Sprintf("  inodes %.0f%%", d.InodePct))
 		}
 		ls = append(ls, line)
 	}
@@ -290,9 +290,9 @@ func (m *model) procBox(s sysinfo.Snapshot, w, h int) []string {
 		}
 		return paint(cDim, txt)
 	}
-	head := hc(fmt.Sprintf("%7s", "PID"), m.sortBy == byPID) + " " + hc(fmt.Sprintf("%-10s", "USUARIO"), false) + " " + hc("S", false) + " " +
+	head := hc(fmt.Sprintf("%7s", "PID"), m.sortBy == byPID) + " " + hc(fmt.Sprintf("%-10s", "USER"), false) + " " + hc("S", false) + " " +
 		hc(fmt.Sprintf("%6s", "CPU%"), m.sortBy == byCPU) + " " + hc(fmt.Sprintf("%5s", "MEM%"), m.sortBy == byMem) + " " +
-		hc(fmt.Sprintf("%8s", "RES"), m.sortBy == byMem) + " " + hc(fmt.Sprintf("%4s", "HIL"), false) + "  " + hc("COMANDO", m.sortBy == byName)
+		hc(fmt.Sprintf("%8s", "RES"), m.sortBy == byMem) + " " + hc(fmt.Sprintf("%4s", "THR"), false) + "  " + hc("COMMAND", m.sortBy == byName)
 	lines := []string{head}
 
 	for i := m.top; i < len(list) && i < m.top+m.rows; i++ {
@@ -314,7 +314,7 @@ func (m *model) procBox(s sysinfo.Snapshot, w, h int) []string {
 			fmt.Sprintf("%8s", fmtBytes(p.RSS))+" "+paint(cDim, fmt.Sprintf("%4d", p.Threads))+"  "+paint(cText, cmd))
 	}
 
-	order := map[sortKey]string{byCPU: "CPU", byMem: "memoria", byPID: "PID", byName: "nombre"}[m.sortBy]
+	order := map[sortKey]string{byCPU: "CPU", byMem: "memory", byPID: "PID", byName: "name"}[m.sortBy]
 	arrow := "▼"
 	if m.rev {
 		arrow = "▲"
@@ -322,9 +322,9 @@ func (m *model) procBox(s sysinfo.Snapshot, w, h int) []string {
 	if m.sortBy == byPID || m.sortBy == byName {
 		arrow = map[bool]string{false: "▲", true: "▼"}[m.rev]
 	}
-	title := paint(cLabel, "Procesos") + paint(cDim, fmt.Sprintf(" · %d · orden %s %s", len(list), order, arrow))
+	title := paint(cLabel, "Processes") + paint(cDim, fmt.Sprintf(" · %d · sort %s %s", len(list), order, arrow))
 	if m.filter != "" {
-		title += paint(cDim, " · filtro ") + paint(cYellow, m.filter)
+		title += paint(cDim, " · filter ") + paint(cYellow, m.filter)
 	}
 	return box(title, lines, w, h)
 }

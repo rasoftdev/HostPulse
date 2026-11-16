@@ -1,4 +1,4 @@
-// Package sysinfo recoge métricas del sistema en Linux, macOS y Windows.
+// Package sysinfo collects system metrics on Linux, macOS and Windows.
 package sysinfo
 
 import (
@@ -42,8 +42,8 @@ type CPU struct {
 	Steal     float64
 	PerCore   []float64
 	LoadAvg   [3]float64
-	TempC     float64 // 0 = sin sensor
-	FreqMHz   float64 // 0 = desconocida
+	TempC     float64 // 0 = no sensor
+	FreqMHz   float64 // 0 = unknown
 	Processes int
 	Threads   int
 	Running   int
@@ -68,7 +68,7 @@ type Disk struct {
 	Used     uint64
 	Free     uint64
 	UsedPct  float64
-	InodePct float64 // 0 = no aplica (p. ej. Windows)
+	InodePct float64 // 0 = not applicable (e.g. Windows)
 }
 
 type DiskIO struct {
@@ -84,7 +84,7 @@ type Iface struct {
 }
 
 type Conns struct {
-	Available   bool // false si el sistema no deja contar conexiones (p. ej. macOS sin sudo)
+	Available   bool // false when the system does not allow counting connections (e.g. macOS without sudo)
 	Established int
 	TimeWait    int
 	Listen      int
@@ -105,14 +105,14 @@ type Proc struct {
 	User    string
 	State   byte // R, S, D, Z, T...
 	Threads int
-	CPUPct  float64 // instantáneo; 100 = un núcleo completo (como htop)
+	CPUPct  float64 // instantaneous; 100 = one full core (like htop)
 	MemPct  float64
 	RSS     uint64
-	Name    string // nombre corto
-	Cmd     string // línea de comandos completa
+	Name    string // short name
+	Cmd     string // full command line
 }
 
-// Snapshot es una lectura completa del sistema.
+// Snapshot is a full reading of the system.
 type Snapshot struct {
 	Host      Host
 	CPU       CPU
@@ -125,7 +125,7 @@ type Snapshot struct {
 }
 
 type Sampler struct {
-	// Interval entre muestras (por defecto 1 s).
+	// Interval between samples (default 1 s).
 	Interval time.Duration
 
 	mu   sync.RWMutex
@@ -134,16 +134,16 @@ type Sampler struct {
 	prevAll   cpu.TimesStat
 	prevCores []cpu.TimesStat
 	prevNet   [4]uint64 // rx bytes, tx bytes, rx pkts, tx pkts
-	prevDisk  [3]uint64 // ops, bytes leídos, bytes escritos
+	prevDisk  [3]uint64 // ops, bytes read, bytes written
 	prevT     time.Time
 
-	// Estado de la lectura de procesos (ver procs_*.go)
-	prevProc map[int]float64 // pid -> segundos de CPU acumulados
+	// Process-reading state (see platform_*.go)
+	prevProc map[int]float64 // pid -> accumulated CPU seconds
 	cmdOf    map[int]string
 	nameOf   map[int]string
 	userOf   map[int]string
 	passwd   map[string]string
-	thrOf    map[int]int // hilos por PID (solo fuera de Linux; se consulta de forma escalonada)
+	thrOf    map[int]int // threads per PID (non-Linux only; queried gradually)
 }
 
 func (s *Sampler) Start() {
@@ -215,7 +215,7 @@ func cpuTotal(t cpu.TimesStat) float64 {
 	return t.User + t.System + t.Idle + t.Nice + t.Iowait + t.Irq + t.Softirq + t.Steal
 }
 
-// usage calcula porcentajes entre dos lecturas acumuladas de tiempos de CPU.
+// usage computes percentages between two cumulative CPU time readings.
 func usage(cur, prev cpu.TimesStat) (pct, user, sys, iow, steal float64) {
 	pt := cpuTotal(prev)
 	dt := cpuTotal(cur) - pt
@@ -291,7 +291,7 @@ func (s *Sampler) tick(i int) {
 	}
 	s.prevCores = cores
 
-	// Red
+	// Network
 	var rx, tx, rp, tp, errs uint64
 	var ifaces []Iface
 	if ios, err := gnet.IOCounters(true); err == nil {
@@ -314,7 +314,7 @@ func (s *Sampler) tick(i int) {
 	s.prevNet = [4]uint64{rx, tx, rp, tp}
 	n.Errors, n.Interfaces = errs, ifaces
 
-	// E/S de disco (solo dispositivos físicos para no contar las particiones dos veces)
+	// Disk I/O (physical devices only, so partitions are not counted twice)
 	var ops, rb, wb uint64
 	if ios, err := disk.IOCounters(); err == nil {
 		for name, io := range ios {
@@ -336,7 +336,7 @@ func (s *Sampler) tick(i int) {
 	s.prevDisk = [3]uint64{ops, rb, wb}
 	s.prevT = now
 
-	// Memoria
+	// Memory
 	var m Memory
 	if vm, err := mem.VirtualMemory(); err == nil {
 		m.Total, m.Available = vm.Total, vm.Available
@@ -391,7 +391,7 @@ func (s *Sampler) tick(i int) {
 	sn.SampledAt = now.UTC().Format(time.RFC3339)
 }
 
-// readTemp devuelve la temperatura de la CPU (o la mayor disponible); 0 si el sistema no expone sensores.
+// readTemp returns the CPU temperature (or the highest available); 0 when the system exposes no sensors.
 func readTemp() float64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -475,7 +475,7 @@ func localIPs() []string {
 	return ips
 }
 
-// PrimaryIP devuelve la IP de salida por defecto (un socket UDP «conectado» no envía tráfico).
+// PrimaryIP returns the default outgoing IP (a "connected" UDP socket sends no traffic).
 func PrimaryIP() string {
 	if c, err := net.Dial("udp", "192.0.2.1:9"); err == nil {
 		defer c.Close()

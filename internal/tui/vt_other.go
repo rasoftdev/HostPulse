@@ -4,6 +4,6 @@ package tui
 
 import "errors"
 
-var errNotTTY = errors.New("hostpulse necesita una terminal interactiva")
+var errNotTTY = errors.New("hostpulse needs an interactive terminal")
 
 func prepareOutput() func() { return func() {} }

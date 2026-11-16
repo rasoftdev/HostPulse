@@ -14,7 +14,7 @@ Type `hostpulse` and watch live: CPU (total and per core), memory, swap, network
 <p align="center">
   <img src="assets/screenshot.svg" alt="HostPulse screenshot showing CPU, memory, network, disks and processes" width="100%">
 </p>
-<p align="center"><sub>Real HostPulse capture on Linux under load (hostname, IP and user anonymized). The interface labels are in Spanish.</sub></p>
+<p align="center"><sub>Real HostPulse capture on Linux under load (hostname, IP and user anonymized).</sub></p>
 
 ## Contents
 

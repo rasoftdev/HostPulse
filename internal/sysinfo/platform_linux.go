@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-const clockTicks = 100 // USER_HZ en Linux
+const clockTicks = 100 // USER_HZ on Linux
 
-// readFreq devuelve la frecuencia media actual de los núcleos (MHz).
+// readFreq returns the current average core frequency (MHz).
 func readFreq() float64 {
 	var sum float64
 	var n int
@@ -31,7 +31,7 @@ func readFreq() float64 {
 	return round1(sum / float64(n))
 }
 
-// readConns cuenta conexiones TCP leyendo /proc/net (mucho más barato que recorrer los descriptores de cada proceso).
+// readConns counts TCP connections by reading /proc/net (much cheaper than walking every process descriptor table).
 func readConns() (c Conns) {
 	c.Available = true
 	for _, p := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
@@ -94,13 +94,13 @@ func (s *Sampler) cmdFor(pid int, comm string) string {
 	}
 	c := strings.TrimSpace(strings.ReplaceAll(readFile("/proc/"+strconv.Itoa(pid)+"/cmdline"), "\x00", " "))
 	if c == "" {
-		c = "[" + comm + "]" // hilo del kernel
+		c = "[" + comm + "]" // kernel thread
 	}
 	s.cmdOf[pid] = c
 	return c
 }
 
-// readProcs lee /proc/<pid>/stat de todos los procesos y calcula la CPU instantánea entre muestras.
+// readProcs reads /proc/<pid>/stat for every process and computes instantaneous CPU between samples.
 func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 	ents, err := os.ReadDir("/proc")
 	if err != nil {
@@ -120,7 +120,7 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 		}
 		b, err := os.ReadFile("/proc/" + e.Name() + "/stat")
 		if err != nil {
-			continue // el proceso terminó mientras leíamos
+			continue // the process exited while we were reading
 		}
 		str := string(b)
 		lp, rp := strings.IndexByte(str, '('), strings.LastIndexByte(str, ')')

@@ -22,7 +22,7 @@ var (
 	cRed    = rgb{242, 92, 100}
 )
 
-// SetColor activa o desactiva los colores.
+// SetColor enables or disables colors.
 func SetColor(on bool) { useColor = on }
 
 func paint(c rgb, s string) string {
@@ -47,7 +47,7 @@ func lerp(a, b rgb, t float64) rgb {
 	return o
 }
 
-// grad devuelve verde → amarillo → rojo según un porcentaje (0–100).
+// grad returns green → yellow → red for a percentage (0–100).
 func grad(p float64) rgb {
 	switch {
 	case p <= 0:
@@ -77,7 +77,7 @@ func imax(a, b int) int {
 	return b
 }
 
-// vlen cuenta los caracteres visibles (sin secuencias ANSI).
+// vlen counts visible characters (ignoring ANSI sequences).
 func vlen(s string) int {
 	n, in := 0, false
 	for _, r := range s {
@@ -113,7 +113,7 @@ func stripANSI(s string) string {
 	return sb.String()
 }
 
-// clip recorta a w caracteres visibles conservando los colores.
+// clip truncates to w visible characters, keeping colors.
 func clip(s string, w int) string {
 	if w <= 0 {
 		return ""
@@ -156,7 +156,7 @@ func pad(s string, w int) string {
 	return s
 }
 
-// bar dibuja una barra horizontal con degradado.
+// bar draws a horizontal bar with a color gradient.
 func bar(p float64, w int) string {
 	if w < 1 {
 		return ""
@@ -172,7 +172,7 @@ func bar(p float64, w int) string {
 
 var sparkRunes = []rune("▁▂▃▄▅▆▇█")
 
-// spark dibuja una mini gráfica con los últimos valores. pct=true usa escala 0–100 con colores por valor.
+// spark draws a mini chart of the latest values. pct=true uses a 0–100 scale with per-value colors.
 func spark(v []float64, w int, pct bool) string {
 	if w < 1 {
 		return ""
@@ -200,7 +200,7 @@ func spark(v []float64, w int, pct bool) string {
 	return sb.String()
 }
 
-// box dibuja un panel con bordes redondeados de exactamente w×h.
+// box draws a rounded-border panel of exactly w×h.
 func box(title string, lines []string, w, h int) []string {
 	if w < 6 || h < 2 {
 		return nil

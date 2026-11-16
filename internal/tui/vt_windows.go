@@ -9,9 +9,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var errNotTTY = errors.New("hostpulse necesita una terminal interactiva (cmd, PowerShell o Windows Terminal)")
+var errNotTTY = errors.New("hostpulse needs an interactive terminal (cmd, PowerShell or Windows Terminal)")
 
-// prepareOutput activa las secuencias ANSI y UTF-8 en la consola de Windows.
+// prepareOutput enables ANSI sequences and UTF-8 in the Windows console.
 func prepareOutput() func() {
 	h := windows.Handle(os.Stdout.Fd())
 	var mode uint32

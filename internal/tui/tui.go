@@ -39,7 +39,7 @@ type model struct {
 
 	cpuH, memH, rxH, txH []float64
 	lastSample           string
-	rows                 int // filas visibles de la tabla de procesos (la fija la vista)
+	rows                 int // visible rows of the process table (set by the view)
 }
 
 func push(h []float64, v float64) []float64 {
@@ -62,7 +62,7 @@ func (m *model) feed(s sysinfo.Snapshot) {
 	m.txH = push(m.txH, s.Network.TxBps)
 }
 
-// parseKeys convierte los bytes de la entrada en nombres de tecla.
+// parseKeys converts input bytes into key names.
 func parseKeys(b []byte) []string {
 	var out []string
 	for i := 0; i < len(b); {
@@ -136,7 +136,7 @@ func (m *model) setSort(k sortKey) {
 	m.sortBy, m.rev = k, false
 }
 
-// key procesa una tecla. Devuelve true si hay que salir.
+// key handles one key press. It returns true when the user wants to quit.
 func (m *model) key(k string) bool {
 	if m.filtering {
 		switch k {
@@ -197,10 +197,10 @@ func (m *model) key(k string) bool {
 
 func (m *model) move(d int) {
 	m.sel += d
-	m.selPID = 0 // se recalcula en la vista según el índice
+	m.selPID = 0 // recomputed by the view from the index
 }
 
-// Run abre la interfaz y bloquea hasta que el usuario sale.
+// Run opens the interface and blocks until the user quits.
 func Run(sam *sysinfo.Sampler) error {
 	restore, err := rawMode()
 	if err != nil {

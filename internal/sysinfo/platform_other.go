@@ -18,7 +18,7 @@ var (
 	connsCache      Conns
 )
 
-// readFreq: gopsutil consulta el sistema (a veces con WMI/IOKit), así que se cachea 15 s.
+// readFreq: gopsutil queries the system (sometimes via WMI/IOKit), so the result is cached for 15 s.
 func readFreq() float64 {
 	if time.Since(freqAt) < 15*time.Second {
 		return freqCache
@@ -30,7 +30,7 @@ func readFreq() float64 {
 	return freqCache
 }
 
-// readConns cuenta conexiones TCP; en macOS puede requerir sudo, y entonces se oculta.
+// readConns counts TCP connections; on macOS it may need sudo, in which case it is hidden.
 func readConns() Conns {
 	if time.Since(connsAt) < 10*time.Second {
 		return connsCache
@@ -55,7 +55,7 @@ func readConns() Conns {
 	return connsCache
 }
 
-// readProcs lista procesos con gopsutil; nombre, línea de comandos y usuario se piden una sola vez por PID.
+// readProcs lists processes with gopsutil; name, command line and user are fetched only once per PID.
 func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 	ps, err := process.Processes()
 	if err != nil && len(ps) == 0 {
@@ -111,7 +111,7 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 		}
 		th, ok := s.thrOf[pid]
 		if !ok && thrBudget > 0 {
-			// NumThreads es muy lento en Windows (~6 ms por proceso): se consulta solo para unos pocos PID nuevos por muestra.
+			// NumThreads is very slow on Windows (~6 ms per process): it is queried only for a few new PIDs per sample.
 			thrBudget--
 			n, _ := p.NumThreads()
 			th = int(n)
