@@ -30,13 +30,13 @@ func (m *model) view(w, h int) []string {
 		rw = w - cw
 	}
 	cpuNeed := len(m.cpuLines(s, cw-4, 1000)) + 2
-	rightNeed := len(m.memLines(s, rw-4)) + 2
+	rightNeed := len(m.memLines(s, rw-4, 1000)) + 2
 	var top []string
 	if wide {
 		th := imin(imax(cpuNeed, rightNeed), body-procMinRows)
 		th = imax(th, 8)
 		l := box(m.cpuTitle(s), m.cpuLines(s, cw-4, th-2), cw, th)
-		r := box("Memory · Network · I/O", m.memLines(s, rw-4), rw, th)
+		r := box("Memory · Network · I/O", m.memLines(s, rw-4, th-2), rw, th)
 		for i := range l {
 			top = append(top, l[i]+r[i])
 		}
@@ -47,12 +47,16 @@ func (m *model) view(w, h int) []string {
 		}
 		rh := imin(rightNeed, body-len(top)-procMinRows)
 		if rh >= 6 {
-			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4), rw, rh)...)
+			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4, rh-2), rw, rh)...)
 		}
 	}
 	rows = append(rows, top...)
 
-	if d := m.diskLines(s, w-4, 4); len(d) > 0 && body-len(rows)-(len(d)+2) >= procMinRows {
+	d := m.diskLines(s, w-4, 4, true)
+	if len(d) > 0 && body-len(rows)-(len(d)+2) < procMinRows {
+		d = m.diskLines(s, w-4, 4, false) // not enough height for blank lines between disks
+	}
+	if len(d) > 0 && body-len(rows)-(len(d)+2) >= procMinRows {
 		rows = append(rows, box("Disks", d, w, len(d)+2)...)
 	}
 
@@ -106,47 +110,53 @@ func (m *model) cpuTitle(s sysinfo.Snapshot) string {
 	return t
 }
 
-func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
-	c := s.CPU
-	var ls []string
-	bw := inner - 4 - 7
-	ls = append(ls, paint(cLabel, "CPU ")+bar(c.UsagePct, bw)+" "+paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)))
-	ls = append(ls, spark(m.cpuH, inner, true))
-	ls = append(ls, paint(cDim, "usr ")+fmt.Sprintf("%4.1f", c.User)+paint(cDim, "  sys ")+fmt.Sprintf("%4.1f", c.System)+
-		paint(cDim, "  io ")+fmt.Sprintf("%4.1f", c.IOWait)+paint(cDim, "  steal ")+fmt.Sprintf("%4.1f", c.Steal))
+// spaced puts a blank line between every item.
+func spaced(items []string) []string {
+	out := make([]string, 0, len(items)*2)
+	for i, it := range items {
+		if i > 0 {
+			out = append(out, "")
+		}
+		out = append(out, it)
+	}
+	return out
+}
 
-	n := len(c.PerCore)
-	avail := imax(0, maxLines-5)
-	if n > 0 && avail > 0 {
-		cols, nrows := 1, n
-		for cols = 1; cols <= 4; cols++ {
-			nrows = (n + cols - 1) / cols
-			if nrows <= avail {
-				break
-			}
+// groups puts a blank line between groups of lines.
+func groups(gs ...[]string) []string {
+	var out []string
+	for i, g := range gs {
+		if i > 0 {
+			out = append(out, "")
 		}
-		if cols > 4 {
-			cols = 4
-		}
-		nrows = imin(nrows, avail)
-		colw := inner / cols
-		cbw := imax(3, colw-2-8)
-		perCol := (n + cols - 1) / cols
-		for r := 0; r < nrows; r++ {
-			var sb strings.Builder
-			for cc := 0; cc < cols; cc++ {
-				i := cc*perCol + r
-				if i >= n {
-					break
-				}
-				p := c.PerCore[i]
-				cell := paint(cDim, fmt.Sprintf("%-3d", i)) + bar(p, cbw) + paint(grad(p), fmt.Sprintf("%4.0f%%", p))
-				sb.WriteString(pad(cell, colw))
-			}
-			ls = append(ls, sb.String())
+		out = append(out, g...)
+	}
+	return out
+}
+
+// cpuLines builds the CPU panel. It tries the airiest layout (blank lines between rows) first and falls back to
+// more compact ones until everything fits in maxLines.
+func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
+	variants := [][3]bool{{true, true, true}, {true, true, false}, {true, false, false}, {false, false, false}}
+	var ls []string
+	for i, v := range variants {
+		var ok bool
+		if ls, ok = m.cpuBuild(s, inner, maxLines, v[0], v[1], v[2], i == len(variants)-1); ok {
+			break
 		}
 	}
+	return ls
+}
 
+func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, gapCores, gapFoot, last bool) ([]string, bool) {
+	c := s.CPU
+	bw := inner - 4 - 7
+	head := []string{
+		paint(cLabel, "CPU ") + bar(c.UsagePct, bw) + " " + paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)),
+		spark(m.cpuH, inner, true),
+		paint(cDim, "usr ") + fmt.Sprintf("%4.1f", c.User) + paint(cDim, "  sys ") + fmt.Sprintf("%4.1f", c.System) +
+			paint(cDim, "  io ") + fmt.Sprintf("%4.1f", c.IOWait) + paint(cDim, "  steal ") + fmt.Sprintf("%4.1f", c.Steal),
+	}
 	info := paint(cDim, "load ") + fmt.Sprintf("%.2f %.2f %.2f", c.LoadAvg[0], c.LoadAvg[1], c.LoadAvg[2]) +
 		paint(cDim, fmt.Sprintf(" · %d cores", c.Cores))
 	if c.FreqMHz > 0 {
@@ -155,47 +165,111 @@ func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 	if c.TempC > 0 {
 		info += paint(cDim, " · ") + paint(grad((c.TempC-40)/50*100), fmt.Sprintf("%.0f°C", c.TempC))
 	}
-	ls = append(ls, info)
-	ls = append(ls, paint(cDim, "tasks ")+fmt.Sprint(c.Processes)+paint(cDim, " · threads ")+fmt.Sprint(c.Threads)+
-		paint(cDim, " · running ")+fmt.Sprint(c.Running)+paint(cDim, " · zombies ")+fmt.Sprint(c.Zombies))
-	return ls
+	foot := []string{info, paint(cDim, "tasks ") + fmt.Sprint(c.Processes) + paint(cDim, " · threads ") + fmt.Sprint(c.Threads) +
+		paint(cDim, " · running ") + fmt.Sprint(c.Running) + paint(cDim, " · zombies ") + fmt.Sprint(c.Zombies)}
+
+	ls := head
+	if gapHead {
+		ls = append(spaced(head), "")
+	}
+	if gapFoot {
+		foot = append([]string{""}, spaced(foot)...)
+	}
+	avail := maxLines - len(ls) - len(foot)
+
+	n := len(c.PerCore)
+	if n > 0 {
+		need := func(r int) int {
+			if gapCores {
+				return 2*r - 1
+			}
+			return r
+		}
+		cols, nrows := 0, 0
+		for cc := 1; cc <= 4; cc++ {
+			if r := (n + cc - 1) / cc; need(r) <= avail {
+				cols, nrows = cc, r
+				break
+			}
+		}
+		if cols == 0 {
+			if !last {
+				return nil, false
+			}
+			if avail > 0 { // compact fallback: show as many rows as fit
+				cols = 4
+				nrows = imin((n+3)/4, avail)
+			}
+		}
+		if cols > 0 {
+			colw := inner / cols
+			cbw := imax(3, colw-2-8)
+			perCol := (n + cols - 1) / cols
+			for r := 0; r < nrows; r++ {
+				var sb strings.Builder
+				for cc := 0; cc < cols; cc++ {
+					i := cc*perCol + r
+					if i >= n {
+						break
+					}
+					p := c.PerCore[i]
+					cell := paint(cDim, fmt.Sprintf("%-3d", i)) + bar(p, cbw) + paint(grad(p), fmt.Sprintf("%4.0f%%", p))
+					sb.WriteString(pad(cell, colw))
+				}
+				ls = append(ls, sb.String())
+				if gapCores && r < nrows-1 {
+					ls = append(ls, "")
+				}
+			}
+		}
+	}
+	return append(ls, foot...), true
 }
 
-func (m *model) memLines(s sysinfo.Snapshot, inner int) []string {
+// memLines builds the memory/network/disk panel: airy first, then grouped, then compact.
+func (m *model) memLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 	me, n := s.Memory, s.Network
-	var ls []string
 	bw := inner - 5 - 7
-	ls = append(ls, paint(cLabel, "RAM  ")+bar(me.UsedPct, bw)+" "+paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct)))
-	ls = append(ls, paint(cDim, "used ")+fmtBytes(me.Used)+paint(cDim, " / ")+fmtBytes(me.Total)+
-		paint(cDim, " · cached ")+fmtBytes(me.Cached)+paint(cDim, " · free ")+fmtBytes(me.Available))
+	ramBar := paint(cLabel, "RAM  ") + bar(me.UsedPct, bw) + " " + paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct))
+	ramInfo := paint(cDim, "used ") + fmtBytes(me.Used) + paint(cDim, " / ") + fmtBytes(me.Total) +
+		paint(cDim, " · cached ") + fmtBytes(me.Cached) + paint(cDim, " · free ") + fmtBytes(me.Available)
+	swap := paint(cLabel, "Swap ") + paint(cDim, "no swap")
 	if me.SwapTotal > 0 {
 		sp := float64(me.SwapUsed) / float64(me.SwapTotal) * 100
-		ls = append(ls, paint(cLabel, "Swap ")+bar(sp, bw)+" "+paint(grad(sp), fmt.Sprintf("%5.1f%%", sp)))
-	} else {
-		ls = append(ls, paint(cLabel, "Swap ")+paint(cDim, "no swap"))
+		swap = paint(cLabel, "Swap ") + bar(sp, bw) + " " + paint(grad(sp), fmt.Sprintf("%5.1f%%", sp))
 	}
-	ls = append(ls, "")
 	sw := imax(4, inner-22)
-	ls = append(ls, paint(cGreen, "↓ ")+pad(paint(cText, fmtRate(n.RxBps)), 11)+paint(cDim, fmt.Sprintf("%7.0f p/s ", n.RxPps))+spark(m.rxH, sw, false))
-	ls = append(ls, paint(cOrange, "↑ ")+pad(paint(cText, fmtRate(n.TxBps)), 11)+paint(cDim, fmt.Sprintf("%7.0f p/s ", n.TxPps))+spark(m.txH, sw, false))
+	rx := paint(cGreen, "↓ ") + pad(paint(cText, fmtRate(n.RxBps)), 11) + paint(cDim, fmt.Sprintf("%7.0f p/s ", n.RxPps)) + spark(m.rxH, sw, false)
+	tx := paint(cOrange, "↑ ") + pad(paint(cText, fmtRate(n.TxBps)), 11) + paint(cDim, fmt.Sprintf("%7.0f p/s ", n.TxPps)) + spark(m.txH, sw, false)
+	tcp := paint(cDim, "network errors ") + fmt.Sprint(n.Errors)
 	if n.Conns.Available {
-		ls = append(ls, paint(cDim, "TCP ")+fmt.Sprintf("%d", n.Conns.Established)+paint(cDim, " est · ")+fmt.Sprintf("%d", n.Conns.TimeWait)+
-			paint(cDim, " tw · ")+fmt.Sprintf("%d", n.Conns.Listen)+paint(cDim, " listen · errors ")+fmt.Sprint(n.Errors))
-	} else {
-		ls = append(ls, paint(cDim, "network errors ")+fmt.Sprint(n.Errors))
+		tcp = paint(cDim, "TCP ") + fmt.Sprintf("%d", n.Conns.Established) + paint(cDim, " est · ") + fmt.Sprintf("%d", n.Conns.TimeWait) +
+			paint(cDim, " tw · ") + fmt.Sprintf("%d", n.Conns.Listen) + paint(cDim, " listen · errors ") + fmt.Sprint(n.Errors)
 	}
-	ls = append(ls, "")
 	d := s.DiskIO
-	ls = append(ls, paint(cLabel, "Disk ")+paint(cDim, "read ")+fmtRate(d.ReadBps)+paint(cDim, " · write ")+fmtRate(d.WriteBps)+
-		paint(cDim, fmt.Sprintf(" · %.0f iops", d.IOPS)))
-	return ls
+	disk := paint(cLabel, "Disk ") + paint(cDim, "read ") + fmtRate(d.ReadBps) + paint(cDim, " · write ") + fmtRate(d.WriteBps) +
+		paint(cDim, fmt.Sprintf(" · %.0f iops", d.IOPS))
+
+	compact := []string{ramBar, ramInfo, swap, rx, tx, tcp, disk}
+	for _, v := range [][]string{
+		spaced(compact),
+		groups([]string{ramBar, ramInfo}, []string{swap}, []string{rx, tx, tcp}, []string{disk}),
+	} {
+		if len(v) <= maxLines {
+			return v
+		}
+	}
+	return compact
 }
 
-func (m *model) diskLines(s sysinfo.Snapshot, inner, max int) []string {
+func (m *model) diskLines(s sysinfo.Snapshot, inner, max int, gap bool) []string {
 	var ls []string
 	for i, d := range s.Disks {
 		if i >= max {
 			break
+		}
+		if gap && i > 0 {
+			ls = append(ls, "")
 		}
 		bw := imax(6, inner-64)
 		mount := d.Mount
