@@ -41,11 +41,17 @@ func (m *model) view(w, h int) []string {
 			top = append(top, l[i]+r[i])
 		}
 	} else {
-		ch := imin(cpuNeed, body-procMinRows)
+		// Memory keeps priority over the CPU per-core rows: shrink CPU first so RAM is always visible.
+		avail := body - procMinRows
+		rh := imin(rightNeed, imax(6, avail-cpuNeed))
+		ch := imin(cpuNeed, avail-rh)
+		if ch < 8 {
+			ch = 0
+			rh = imin(rightNeed, avail)
+		}
 		if ch >= 8 {
 			top = append(top, box(m.cpuTitle(s), m.cpuLines(s, cw-4, ch-2), cw, ch)...)
 		}
-		rh := imin(rightNeed, body-len(top)-procMinRows)
 		if rh >= 6 {
 			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4), rw, rh)...)
 		}
