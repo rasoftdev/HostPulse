@@ -30,13 +30,13 @@ func (m *model) view(w, h int) []string {
 		rw = w - cw
 	}
 	cpuNeed := len(m.cpuLines(s, cw-4, 1000)) + 2
-	rightNeed := len(m.memLines(s, rw-4, 1000)) + 2
+	rightNeed := len(m.memLines(s, rw-4)) + 2
 	var top []string
 	if wide {
 		th := imin(imax(cpuNeed, rightNeed), body-procMinRows)
 		th = imax(th, 8)
 		l := box(m.cpuTitle(s), m.cpuLines(s, cw-4, th-2), cw, th)
-		r := box("Memory · Network · I/O", m.memLines(s, rw-4, th-2), rw, th)
+		r := box("Memory · Network · I/O", m.memLines(s, rw-4), rw, th)
 		for i := range l {
 			top = append(top, l[i]+r[i])
 		}
@@ -47,15 +47,12 @@ func (m *model) view(w, h int) []string {
 		}
 		rh := imin(rightNeed, body-len(top)-procMinRows)
 		if rh >= 6 {
-			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4, rh-2), rw, rh)...)
+			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4), rw, rh)...)
 		}
 	}
 	rows = append(rows, top...)
 
-	d := m.diskLines(s, w-4, 4, true)
-	if len(d) > 0 && body-len(rows)-(len(d)+2) < procMinRows {
-		d = m.diskLines(s, w-4, 4, false) // not enough height for blank lines between disks
-	}
+	d := m.diskLines(s, w-4, 4)
 	if len(d) > 0 && body-len(rows)-(len(d)+2) >= procMinRows {
 		rows = append(rows, box("Disks", d, w, len(d)+2)...)
 	}
@@ -110,48 +107,21 @@ func (m *model) cpuTitle(s sysinfo.Snapshot) string {
 	return t
 }
 
-// spaced puts a blank line between every item.
-func spaced(items []string) []string {
-	out := make([]string, 0, len(items)*2)
-	for i, it := range items {
-		if i > 0 {
-			out = append(out, "")
-		}
-		out = append(out, it)
-	}
-	return out
-}
-
-// groups puts a blank line between groups of lines.
-func groups(gs ...[]string) []string {
-	var out []string
-	for i, g := range gs {
-		if i > 0 {
-			out = append(out, "")
-		}
-		out = append(out, g...)
-	}
-	return out
-}
-
-// cpuLines builds the CPU panel. It tries the airiest layout (blank lines between rows) first and falls back to
-// more compact ones until everything fits in maxLines.
+// cpuLines builds the CPU panel. Everything is tight except the per-core rows, which get a blank line between
+// them when there is enough height; otherwise the compact layout is used.
 func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
-	variants := [][3]bool{{true, true, true}, {true, true, false}, {true, false, false}, {false, false, false}}
-	var ls []string
-	for i, v := range variants {
-		var ok bool
-		if ls, ok = m.cpuBuild(s, inner, maxLines, v[0], v[1], v[2], i == len(variants)-1); ok {
-			break
-		}
+	if ls, ok := m.cpuBuild(s, inner, maxLines, true, false); ok {
+		return ls
 	}
+	ls, _ := m.cpuBuild(s, inner, maxLines, false, true)
 	return ls
 }
 
-func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, gapCores, gapFoot, last bool) ([]string, bool) {
+func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapCores, last bool) ([]string, bool) {
 	c := s.CPU
 	bw := inner - 4 - 7
-	head := []string{
+	ls := []string{
+		"", // breathing room under the panel title
 		paint(cLabel, "CPU ") + bar(c.UsagePct, bw) + " " + paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)),
 		spark(m.cpuH, inner, true),
 		paint(cDim, "usr ") + fmt.Sprintf("%4.1f", c.User) + paint(cDim, "  sys ") + fmt.Sprintf("%4.1f", c.System) +
@@ -167,14 +137,6 @@ func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, gapCo
 	}
 	foot := []string{info, paint(cDim, "tasks ") + fmt.Sprint(c.Processes) + paint(cDim, " · threads ") + fmt.Sprint(c.Threads) +
 		paint(cDim, " · running ") + fmt.Sprint(c.Running) + paint(cDim, " · zombies ") + fmt.Sprint(c.Zombies)}
-
-	ls := head
-	if gapHead {
-		ls = append(spaced(head), "")
-	}
-	if gapFoot {
-		foot = append([]string{""}, spaced(foot)...)
-	}
 	avail := maxLines - len(ls) - len(foot)
 
 	n := len(c.PerCore)
@@ -226,8 +188,8 @@ func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, gapCo
 	return append(ls, foot...), true
 }
 
-// memLines builds the memory/network/disk panel: airy first, then grouped, then compact.
-func (m *model) memLines(s sysinfo.Snapshot, inner, maxLines int) []string {
+// memLines builds the memory/network/disk panel.
+func (m *model) memLines(s sysinfo.Snapshot, inner int) []string {
 	me, n := s.Memory, s.Network
 	bw := inner - 5 - 7
 	ramBar := paint(cLabel, "RAM  ") + bar(me.UsedPct, bw) + " " + paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct))
@@ -249,27 +211,14 @@ func (m *model) memLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 	d := s.DiskIO
 	disk := paint(cLabel, "Disk ") + paint(cDim, "read ") + fmtRate(d.ReadBps) + paint(cDim, " · write ") + fmtRate(d.WriteBps) +
 		paint(cDim, fmt.Sprintf(" · %.0f iops", d.IOPS))
-
-	compact := []string{ramBar, ramInfo, swap, rx, tx, tcp, disk}
-	for _, v := range [][]string{
-		spaced(compact),
-		groups([]string{ramBar, ramInfo}, []string{swap}, []string{rx, tx, tcp}, []string{disk}),
-	} {
-		if len(v) <= maxLines {
-			return v
-		}
-	}
-	return compact
+	return []string{"", ramBar, ramInfo, swap, "", rx, tx, tcp, "", disk} // leading blank line: room under the panel title
 }
 
-func (m *model) diskLines(s sysinfo.Snapshot, inner, max int, gap bool) []string {
+func (m *model) diskLines(s sysinfo.Snapshot, inner, max int) []string {
 	var ls []string
 	for i, d := range s.Disks {
 		if i >= max {
 			break
-		}
-		if gap && i > 0 {
-			ls = append(ls, "")
 		}
 		bw := imax(6, inner-64)
 		mount := d.Mount
