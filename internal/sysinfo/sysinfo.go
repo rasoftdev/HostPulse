@@ -143,6 +143,7 @@ type Sampler struct {
 	nameOf   map[int]string
 	userOf   map[int]string
 	passwd   map[string]string
+	thrOf    map[int]int // hilos por PID (solo fuera de Linux; se consulta de forma escalonada)
 }
 
 func (s *Sampler) Start() {

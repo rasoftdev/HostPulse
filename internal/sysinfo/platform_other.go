@@ -62,12 +62,13 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 		return nil, 0
 	}
 	if s.prevProc == nil {
-		s.prevProc, s.cmdOf, s.nameOf, s.userOf = map[int]float64{}, map[int]string{}, map[int]string{}, map[int]string{}
+		s.prevProc, s.cmdOf, s.nameOf, s.userOf, s.thrOf = map[int]float64{}, map[int]string{}, map[int]string{}, map[int]string{}, map[int]int{}
 	}
 	cur := make(map[int]float64, len(ps))
 	out := make([]Proc, 0, len(ps))
 	zombies := 0
 	alive := make(map[int]bool, len(ps))
+	thrBudget := 25
 	for _, p := range ps {
 		pid := int(p.Pid)
 		alive[pid] = true
@@ -108,7 +109,14 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 		if memTotal > 0 {
 			memPct = float64(rss) / float64(memTotal) * 100
 		}
-		th, _ := p.NumThreads()
+		th, ok := s.thrOf[pid]
+		if !ok && thrBudget > 0 {
+			// NumThreads es muy lento en Windows (~6 ms por proceso): se consulta solo para unos pocos PID nuevos por muestra.
+			thrBudget--
+			n, _ := p.NumThreads()
+			th = int(n)
+			s.thrOf[pid] = th
+		}
 
 		st := byte('S')
 		if cpuPct >= 0.1 {
@@ -124,7 +132,7 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 			zombies++
 		}
 		out = append(out, Proc{
-			PID: pid, User: s.userOf[pid], State: st, Threads: int(th),
+			PID: pid, User: s.userOf[pid], State: st, Threads: th,
 			CPUPct: round1(cpuPct), MemPct: round1(memPct), RSS: rss,
 			Name: name, Cmd: s.cmdOf[pid],
 		})
@@ -135,6 +143,7 @@ func (s *Sampler) readProcs(dt float64, memTotal uint64) ([]Proc, int) {
 			delete(s.nameOf, pid)
 			delete(s.cmdOf, pid)
 			delete(s.userOf, pid)
+			delete(s.thrOf, pid)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CPUPct > out[j].CPUPct })
