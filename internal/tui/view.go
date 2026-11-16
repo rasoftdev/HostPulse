@@ -30,13 +30,13 @@ func (m *model) view(w, h int) []string {
 		rw = w - cw
 	}
 	cpuNeed := len(m.cpuLines(s, cw-4, 1000)) + 2
-	rightNeed := len(m.memLines(s, rw-4, 1000)) + 2
+	rightNeed := len(m.memLines(s, rw-4)) + 2
 	var top []string
 	if wide {
 		th := imin(imax(cpuNeed, rightNeed), body-procMinRows)
 		th = imax(th, 8)
 		l := box(m.cpuTitle(s), m.cpuLines(s, cw-4, th-2), cw, th)
-		r := box("Memory · Network · I/O", m.memLines(s, rw-4, th-2), rw, th)
+		r := box("Memory · Network · I/O", m.memLines(s, rw-4), rw, th)
 		for i := range l {
 			top = append(top, l[i]+r[i])
 		}
@@ -47,15 +47,12 @@ func (m *model) view(w, h int) []string {
 		}
 		rh := imin(rightNeed, body-len(top)-procMinRows)
 		if rh >= 6 {
-			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4, rh-2), rw, rh)...)
+			top = append(top, box("Memory · Network · I/O", m.memLines(s, rw-4), rw, rh)...)
 		}
 	}
 	rows = append(rows, top...)
 
-	d := m.diskLines(s, w-4, 4, true)
-	if len(d) > 0 && body-len(rows)-(len(d)+2) < procMinRows {
-		d = m.diskLines(s, w-4, 4, false) // short terminal: drop the blank lines between disks
-	}
+	d := m.diskLines(s, w-4, 4)
 	if len(d) > 0 && body-len(rows)-(len(d)+2) >= procMinRows {
 		rows = append(rows, box("Disks", d, w, len(d)+2)...)
 	}
@@ -110,28 +107,16 @@ func (m *model) cpuTitle(s sysinfo.Snapshot) string {
 	return t
 }
 
-// cpuLines builds the CPU panel: a little air between the usage bar, the history chart and the breakdown, and
-// the per-core rows tight. When the terminal is short, the air is dropped before any data is cut.
+// cpuLines builds the CPU panel: total usage, history chart, breakdown, the per-core rows (tight) and load/tasks.
 func (m *model) cpuLines(s sysinfo.Snapshot, inner, maxLines int) []string {
-	if ls, ok := m.cpuBuild(s, inner, maxLines, true, false); ok {
-		return ls
-	}
-	ls, _ := m.cpuBuild(s, inner, maxLines, false, true)
-	return ls
-}
-
-func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, last bool) ([]string, bool) {
 	c := s.CPU
 	bw := inner - 4 - 7
-	usage := paint(cLabel, "CPU ") + bar(c.UsagePct, bw) + " " + paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct))
-	chart := spark(m.cpuH, inner, true)
-	breakdown := paint(cDim, "usr ") + fmt.Sprintf("%4.1f", c.User) + paint(cDim, "  sys ") + fmt.Sprintf("%4.1f", c.System) +
-		paint(cDim, "  io ") + fmt.Sprintf("%4.1f", c.IOWait) + paint(cDim, "  steal ") + fmt.Sprintf("%4.1f", c.Steal)
-	ls := []string{"", usage, chart, breakdown} // leading blank line: room under the panel title
-	if gapHead {
-		ls = []string{"", usage, "", chart, breakdown}
+	ls := []string{
+		paint(cLabel, "CPU ") + thinBar(c.UsagePct, bw) + " " + paint(grad(c.UsagePct), fmt.Sprintf("%5.1f%%", c.UsagePct)),
+		spark(m.cpuH, inner, true),
+		paint(cDim, "usr ") + fmt.Sprintf("%4.1f", c.User) + paint(cDim, "  sys ") + fmt.Sprintf("%4.1f", c.System) +
+			paint(cDim, "  io ") + fmt.Sprintf("%4.1f", c.IOWait) + paint(cDim, "  steal ") + fmt.Sprintf("%4.1f", c.Steal),
 	}
-
 	info := paint(cDim, "load ") + fmt.Sprintf("%.2f %.2f %.2f", c.LoadAvg[0], c.LoadAvg[1], c.LoadAvg[2]) +
 		paint(cDim, fmt.Sprintf(" · %d cores", c.Cores))
 	if c.FreqMHz > 0 {
@@ -142,60 +127,52 @@ func (m *model) cpuBuild(s sysinfo.Snapshot, inner, maxLines int, gapHead, last 
 	}
 	foot := []string{info, paint(cDim, "tasks ") + fmt.Sprint(c.Processes) + paint(cDim, " · threads ") + fmt.Sprint(c.Threads) +
 		paint(cDim, " · running ") + fmt.Sprint(c.Running) + paint(cDim, " · zombies ") + fmt.Sprint(c.Zombies)}
-	avail := maxLines - len(ls) - len(foot)
 
+	avail := imax(0, maxLines-len(ls)-len(foot))
 	n := len(c.PerCore)
-	if n > 0 {
-		cols, nrows := 0, 0
-		for cc := 1; cc <= 4; cc++ {
-			if r := (n + cc - 1) / cc; r <= avail {
-				cols, nrows = cc, r
+	if n > 0 && avail > 0 {
+		cols, nrows := 1, n
+		for cols = 1; cols <= 4; cols++ {
+			nrows = (n + cols - 1) / cols
+			if nrows <= avail {
 				break
 			}
 		}
-		if cols == 0 {
-			if !last {
-				return nil, false
-			}
-			if avail > 0 { // short terminal: show as many rows as fit
-				cols = 4
-				nrows = imin((n+3)/4, avail)
-			}
+		if cols > 4 {
+			cols = 4
 		}
-		if cols > 0 {
-			colw := inner / cols
-			cbw := imax(3, colw-2-8)
-			perCol := (n + cols - 1) / cols
-			for r := 0; r < nrows; r++ {
-				var sb strings.Builder
-				for cc := 0; cc < cols; cc++ {
-					i := cc*perCol + r
-					if i >= n {
-						break
-					}
-					p := c.PerCore[i]
-					cell := paint(cDim, fmt.Sprintf("%-3d", i)) + bar(p, cbw) + paint(grad(p), fmt.Sprintf("%4.0f%%", p))
-					sb.WriteString(pad(cell, colw))
+		nrows = imin(nrows, avail)
+		colw := inner / cols
+		cbw := imax(3, colw-2-8)
+		perCol := (n + cols - 1) / cols
+		for r := 0; r < nrows; r++ {
+			var sb strings.Builder
+			for cc := 0; cc < cols; cc++ {
+				i := cc*perCol + r
+				if i >= n {
+					break
 				}
-				ls = append(ls, sb.String())
+				p := c.PerCore[i]
+				cell := paint(cDim, fmt.Sprintf("%-3d", i)) + bar(p, cbw) + paint(grad(p), fmt.Sprintf("%4.0f%%", p))
+				sb.WriteString(pad(cell, colw))
 			}
+			ls = append(ls, sb.String())
 		}
 	}
-	return append(ls, foot...), true
+	return append(ls, foot...)
 }
 
-// memLines builds the memory/network/disk panel. RAM gets a little air between its bar and its details when
-// there is room; the rest stays tight.
-func (m *model) memLines(s sysinfo.Snapshot, inner, maxLines int) []string {
+// memLines builds the memory/network/disk panel.
+func (m *model) memLines(s sysinfo.Snapshot, inner int) []string {
 	me, n := s.Memory, s.Network
 	bw := inner - 5 - 7
-	ramBar := paint(cLabel, "RAM  ") + bar(me.UsedPct, bw) + " " + paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct))
+	ramBar := paint(cLabel, "RAM  ") + thinBar(me.UsedPct, bw) + " " + paint(grad(me.UsedPct), fmt.Sprintf("%5.1f%%", me.UsedPct))
 	ramInfo := paint(cDim, "used ") + fmtBytes(me.Used) + paint(cDim, " / ") + fmtBytes(me.Total) +
 		paint(cDim, " · cached ") + fmtBytes(me.Cached) + paint(cDim, " · free ") + fmtBytes(me.Available)
 	swap := paint(cLabel, "Swap ") + paint(cDim, "no swap")
 	if me.SwapTotal > 0 {
 		sp := float64(me.SwapUsed) / float64(me.SwapTotal) * 100
-		swap = paint(cLabel, "Swap ") + bar(sp, bw) + " " + paint(grad(sp), fmt.Sprintf("%5.1f%%", sp))
+		swap = paint(cLabel, "Swap ") + thinBar(sp, bw) + " " + paint(grad(sp), fmt.Sprintf("%5.1f%%", sp))
 	}
 	sw := imax(4, inner-22)
 	rx := paint(cGreen, "↓ ") + pad(paint(cText, fmtRate(n.RxBps)), 11) + paint(cDim, fmt.Sprintf("%7.0f p/s ", n.RxPps)) + spark(m.rxH, sw, false)
@@ -208,30 +185,21 @@ func (m *model) memLines(s sysinfo.Snapshot, inner, maxLines int) []string {
 	d := s.DiskIO
 	disk := paint(cLabel, "Disk ") + paint(cDim, "read ") + fmtRate(d.ReadBps) + paint(cDim, " · write ") + fmtRate(d.WriteBps) +
 		paint(cDim, fmt.Sprintf(" · %.0f iops", d.IOPS))
-
-	// the leading blank line gives room under the panel title
-	airy := []string{"", ramBar, "", ramInfo, swap, "", rx, tx, tcp, "", disk}
-	if len(airy) <= maxLines {
-		return airy
-	}
-	return []string{"", ramBar, ramInfo, swap, "", rx, tx, tcp, "", disk}
+	return []string{ramBar, ramInfo, swap, "", rx, tx, tcp, "", disk}
 }
 
-func (m *model) diskLines(s sysinfo.Snapshot, inner, max int, gap bool) []string {
+func (m *model) diskLines(s sysinfo.Snapshot, inner, max int) []string {
 	var ls []string
 	for i, d := range s.Disks {
 		if i >= max {
 			break
-		}
-		if gap && i > 0 {
-			ls = append(ls, "")
 		}
 		bw := imax(6, inner-64)
 		mount := d.Mount
 		if len(mount) > 14 {
 			mount = "…" + mount[len(mount)-13:]
 		}
-		line := paint(cText, pad(mount, 14)) + " " + paint(cDim, pad(d.FSType, 7)) + " " + bar(d.UsedPct, bw) + " " +
+		line := paint(cText, pad(mount, 14)) + " " + paint(cDim, pad(d.FSType, 7)) + " " + thinBar(d.UsedPct, bw) + " " +
 			paint(grad(d.UsedPct), fmt.Sprintf("%5.1f%%", d.UsedPct)) + "  " + fmtBytes(d.Used) + paint(cDim, " / ") + fmtBytes(d.Total)
 		if d.InodePct > 0 {
 			line += paint(cDim, fmt.Sprintf("  inodes %.0f%%", d.InodePct))

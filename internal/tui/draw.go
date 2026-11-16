@@ -16,6 +16,7 @@ var (
 	cLabel  = rgb{128, 168, 255}
 	cAccent = rgb{94, 204, 232}
 	cBorder = rgb{70, 78, 102}
+	cTrack  = rgb{40, 46, 66} // empty part of thin bars
 	cGreen  = rgb{98, 208, 128}
 	cYellow = rgb{240, 204, 90}
 	cOrange = rgb{244, 150, 80}
@@ -251,4 +252,19 @@ func fmtUptime(sec float64) string {
 	default:
 		return fmt.Sprintf("%dm %ds", m, s%60)
 	}
+}
+
+// thinBar is a half-height bar (lower half blocks). It leaves a small gap above and below instead of a whole blank
+// row, so stacked bars and bars under a panel title do not touch.
+func thinBar(p float64, w int) string {
+	if w < 1 {
+		return ""
+	}
+	n := int(math.Round(clamp(p, 0, 100) / 100 * float64(w)))
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteString(paint(grad(float64(i)/float64(w)*100), "▄"))
+	}
+	sb.WriteString(paint(cTrack, strings.Repeat("▄", w-n)))
+	return sb.String()
 }
