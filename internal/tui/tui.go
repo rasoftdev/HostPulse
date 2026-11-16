@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -207,9 +206,9 @@ func Run(sam *sysinfo.Sampler) error {
 		return err
 	}
 	out := os.Stdout
-	fmt.Fprint(out, "\x1b[?1049h\x1b[?25l\x1b[2J")
+	fmt.Fprint(out, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J")
 	cleanup := func() {
-		fmt.Fprint(out, "\x1b[?25h\x1b[?1049l")
+		fmt.Fprint(out, "\x1b[?7h\x1b[?25h\x1b[?1049l")
 		restore()
 	}
 	defer cleanup()
@@ -245,7 +244,7 @@ func Run(sam *sysinfo.Sampler) error {
 		}
 		if dirty {
 			frame := m.view(w, h)
-			fmt.Fprint(out, "\x1b[H"+strings.Join(frame, "\x1b[K\r\n")+"\x1b[K\x1b[J")
+			fmt.Fprint(out, render(frame, w))
 			dirty = false
 		}
 		select {

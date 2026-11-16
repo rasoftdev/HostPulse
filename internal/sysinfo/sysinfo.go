@@ -144,6 +144,7 @@ type Sampler struct {
 	userOf   map[int]string
 	passwd   map[string]string
 	thrOf    map[int]int // threads per PID (non-Linux only; queried gradually)
+	procBuf  []byte      // reusable buffer for the Windows process snapshot
 }
 
 func (s *Sampler) Start() {

@@ -29,8 +29,11 @@ func (m *model) view(w, h int) []string {
 		cw = w / 2
 		rw = w - cw
 	}
-	cpuNeed := len(m.cpuLines(s, cw-4, 1000)) + 2
+
 	rightNeed := len(m.memLines(s, rw-4)) + 2
+	// Cap the CPU panel to the memory panel height: with many cores the per-core rows use several columns
+	// instead of stretching the whole top row (which left the memory panel mostly empty).
+	cpuNeed := len(m.cpuLines(s, cw-4, imax(rightNeed-2, 9))) + 2
 	var top []string
 	if wide {
 		th := imin(imax(cpuNeed, rightNeed), body-procMinRows)

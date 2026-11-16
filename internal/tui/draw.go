@@ -268,3 +268,19 @@ func thinBar(p float64, w int) string {
 	sb.WriteString(paint(cTrack, strings.Repeat("▄", w-n)))
 	return sb.String()
 }
+
+// render builds one write for the whole frame. Every row is positioned absolutely and the rest of the line is only
+// cleared when the row is shorter than the terminal: erasing after a full-width row wipes its last column on
+// Windows Terminal/conhost (pending-wrap state), which cut the right border of every box.
+func render(frame []string, w int) string {
+	var sb strings.Builder
+	for i, l := range frame {
+		fmt.Fprintf(&sb, "\x1b[%d;1H", i+1)
+		l = clip(l, w)
+		sb.WriteString(l)
+		if vlen(l) < w {
+			sb.WriteString("\x1b[0m\x1b[K")
+		}
+	}
+	return sb.String()
+}
